@@ -53,6 +53,7 @@ int main( int argc, char* argv[] )
     // Size, in bytes, of each vector
     size_t bytes = nx*ny*sizeof(float);
 
+
     // Allocate memory for each vector on host
     if (enable_pinned_memory) {
         cudaMallocHost((void**)&h_Ain, bytes);
@@ -75,16 +76,8 @@ int main( int argc, char* argv[] )
         }
     }
 
-    /*
-    for( i = 0; i < ny; i++ ) {
-        for(j = 0; j < nx; j++) {
-            printf("%f \t", h_Ain(i,j));
-        }
-        printf("\n");
-    }
-    */
-
     float ms; // elapsed time in milliseconds
+    float total_time = 0;
     
     // create events and streams
     cudaEvent_t startEvent, stopEvent, dummyEvent;
@@ -93,11 +86,15 @@ int main( int argc, char* argv[] )
     dim3 DimGrid(ceil(nx/16.0),ceil(ny/16.0));
     dim3 DimBlock(16,16);
 
+
+
     cudaEventCreate(&startEvent);
     cudaEventCreate(&stopEvent);
     cudaEventCreate(&dummyEvent);
-    // Copy host vectors to device
 
+    clock_t total_time_begin = clock();
+
+    // Copy host vectors to device
     cudaEventRecord(startEvent,0);
   
     cudaMemcpy(d_Ain, h_Ain, bytes, cudaMemcpyHostToDevice);
@@ -112,50 +109,12 @@ int main( int argc, char* argv[] )
     cudaEventRecord(stopEvent, 0);
     cudaEventSynchronize(stopEvent);
     cudaEventElapsedTime(&ms, startEvent, stopEvent);
+
+    clock_t total_time_end = clock();
+    total_time = ((double)(total_time_end - total_time_begin) / (CLOCKS_PER_SEC / 1000)); // output in milli seocnd
+
+    printf("Total time (ms): %f\n", total_time);
     printf("Time for sequential transfer and execute (ms): %f\n", ms);
-
-    
-/*
-    // Size, in bytes, of each vector
-    size_t bytes = nx*ny*sizeof(int);
- 
-    // Allocate memory for each vector on host
-    h_Ain = (int*)malloc(bytes);
-    h_Aout = (int*)malloc(bytes);
- 
-    // Allocate memory for each vector on GPU
-    cudaMalloc(&d_Ain, bytes);
-    cudaMalloc(&d_Aout, bytes);
- 
-    int i,j;
-    // Initialize vectors on host
-    for( i = 0; i < ny; i++ ) {
-        for(j = 0; j < nx; j++) {
-            h_Ain[i*nx + j] = rand();
-        }
-    }
- 
-    // Copy host vectors to device
-    cudaMemcpy(d_Ain, h_Ain, bytes, cudaMemcpyHostToDevice);
- 
-    dim3 DimGrid(ceil(nx/16.0),ceil(ny/16.0));
-    dim3 DimBlock(16,16);
-
-    printf("Ain[1] result: %d\n", h_Ain[1]);
-
-    printf("Launching kernel stencil....... \n");
-    
-    // Execute the kernel
-    stencil<<<DimGrid,DimBlock>>>(d_Ain, d_Aout, nx, ny);
- 
-    // Copy array back to host
-    cudaMemcpy(h_Aout, d_Aout, bytes, cudaMemcpyDeviceToHost );
- 
-    // Sum up vector c and print result divided by n, this should equal 1 within error
-    printf("Aout[1] result: %d\n", h_Aout[1]);
-
-*/
-    //printf("%f ~~~~~~~~~ \n", h_Ain(3,4));
 
     // Release device memory
     cudaFree(d_Ain);

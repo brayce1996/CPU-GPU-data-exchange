@@ -102,6 +102,7 @@ int main( int argc, char* argv[] )
     */
 
     float ms; // elapsed time in milliseconds
+    float total_time = 0;
     
     // create events and streams
     cudaEvent_t startEvent, stopEvent, dummyEvent;
@@ -113,8 +114,10 @@ int main( int argc, char* argv[] )
     cudaEventCreate(&startEvent);
     cudaEventCreate(&stopEvent);
     cudaEventCreate(&dummyEvent);
-    // Copy host vectors to device
 
+    clock_t total_time_begin = clock();
+
+    // Copy host vectors to device
     checkCuda( cudaEventRecord(startEvent,0) );
     for (int i = 0; i < nStreams; ++i) {
         int offset = i * streamSize;
@@ -129,10 +132,12 @@ int main( int argc, char* argv[] )
     checkCuda( cudaEventRecord(stopEvent, 0) );
     checkCuda( cudaEventSynchronize(stopEvent) );
     checkCuda( cudaEventElapsedTime(&ms, startEvent, stopEvent) );
+
+    clock_t total_time_end = clock();
+    total_time = ((double)(total_time_end - total_time_begin) / (CLOCKS_PER_SEC / 1000)); // output in milli seocnd
+
+    printf("Total time (ms): %f\n", total_time);
     printf("Time for Streamed version transfer and execute (ms): %f\n", ms);
-
-
-    //printf("%f ~~~~~~~~~ \n", h_Ain(3,4));
 
     // Release device memory
     cudaFree(d_Ain);

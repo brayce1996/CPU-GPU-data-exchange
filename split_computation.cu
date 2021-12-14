@@ -28,6 +28,20 @@ __global__ void stencil(float *d_Ain, float *d_Aout, int nx, int ny)
     }
 }
 
+void cpu_side_stencil(float *h_Ain, float *h_Aout, int nx, int ny) {
+    float north, south, east, west;
+    int i, j;
+    for (i = nx/2, j = 0; (i < nx - 1) && (j < ny - 1); i++, j++) {
+        float current =  h_Ain(i, j);
+        north = h_Ain(i-1,j);
+        south = h_Ain(i+1,j);
+        east = h_Ain(i,j+1);
+        west = h_Ain(i,j-1);
+
+        h_Aout(i,j) = -4 * current + north + south + east + west;
+    }
+}
+
 int main( int argc, char* argv[] )
 {
     int grid_size = atoi(argv[1]);
@@ -40,23 +54,41 @@ int main( int argc, char* argv[] )
     // Host input vectors
     float *h_Ain;
     
-    //Host output vector
+    // Host output vector
     float *h_Aout;
  
     // Device input vectors
     float *d_Ain;
  
-    //Device output vector
+    // Device output vector
     float *d_Aout;
 
     // Size, in bytes, of each vector
     size_t bytes = nx*ny*sizeof(float);
 
+    // time measurement variables
+    float memcpy_htod_time = 0;
+    float memcpy_dtoh_time = 0;
+    float gpu_compute_time = 0;
+    float cpu_compute_time = 0;
+    float total_time = 0;
+    
+    // create events
+    cudaEvent_t memcpy_htod_start_event, memcpy_htod_stop_event;
+    cudaEvent_t memcpy_dtoh_start_event, memcpy_dtoh_stop_event;
+    cudaEvent_t gpu_compute_start_event, gpu_compute_stop_event;
+    cudaEventCreate(&memcpy_htod_start_event);
+    cudaEventCreate(&memcpy_htod_stop_event);
+    cudaEventCreate(&memcpy_dtoh_start_event);
+    cudaEventCreate(&memcpy_dtoh_stop_event);
+    cudaEventCreate(&gpu_compute_start_event);
+    cudaEventCreate(&gpu_compute_stop_event);
+
+
     // Allocate memory for each vector on host
     if (enable_pinned_memory) {
         cudaMallocHost((void**)&h_Ain, bytes);
         cudaMallocHost((void**)&h_Aout, bytes);
-        // memset(h_Aout, 0, bytes);
     } else {
         h_Ain = (float*)malloc(bytes);
         h_Aout = (float*)malloc(bytes);
@@ -74,101 +106,59 @@ int main( int argc, char* argv[] )
         }
     }
 
-    /*
-    for( i = 0; i < ny; i++ ) {
-        for(j = 0; j < nx; j++) {
-            printf("%f \t", h_Ain(i,j));
-        }
-        printf("\n");
-    }
-    */
-
-    float ms; // elapsed time in milliseconds
-    
-    // create events and streams
-    cudaEvent_t startEvent, stopEvent, dummyEvent;
-    
-
     dim3 DimGrid(ceil(nx/16.0),ceil((ny/2)/16.0));
     dim3 DimBlock(16,16);
 
-    cudaEventCreate(&startEvent);
-    cudaEventCreate(&stopEvent);
-    cudaEventCreate(&dummyEvent);
-    // Copy host vectors to device
+    clock_t total_time_begin = clock();
 
-    cudaEventRecord(startEvent,0);
-  
+    // Copy host vectors to device
+    cudaEventRecord(memcpy_htod_start_event, 0);
+
     cudaMemcpy(d_Ain, h_Ain, bytes/2, cudaMemcpyHostToDevice);
 
-    //printf("Launching kernel stencil....... \n");
+    cudaEventRecord(memcpy_htod_stop_event, 0);
+    cudaEventSynchronize(memcpy_htod_stop_event);
+    cudaEventElapsedTime(&memcpy_htod_time, memcpy_htod_start_event, memcpy_htod_stop_event);
+
+
+    // start kernel computaion
+    cudaEventRecord(gpu_compute_start_event, 0);
 
     stencil<<<DimGrid,DimBlock>>>(d_Ain, d_Aout, nx, ny/2);
 
+    cudaEventRecord(gpu_compute_stop_event, 0);
+    cudaEventSynchronize(gpu_compute_stop_event);
+    cudaEventElapsedTime(&gpu_compute_time, gpu_compute_start_event, gpu_compute_stop_event);
+
     //Computation on Host
-    float north, south, east, west;
 
-    if ( (i >= (nx/2) && i < nx - 1) && (j > 0 && j < ny - 1) ) {
-        float current =  h_Ain(i, j);
-        north = h_Ain(i-1,j);
-        south = h_Ain(i+1,j);
-        east = h_Ain(i,j+1);
-        west = h_Ain(i,j-1);
+    clock_t cpu_begin = clock();
 
-        h_Aout(i,j) = -4 * current + north + south + east + west;
-    }
+    cpu_side_stencil(h_Ain, h_Aout, nx, ny);
+
+    clock_t cpu_end = clock();
+    cpu_compute_time = ((double)(cpu_end - cpu_begin) / (CLOCKS_PER_SEC / 1000)); // output in milli seocnd
     
 
     // Copy array back to host
+    cudaEventRecord(memcpy_dtoh_start_event, 0);
+
     cudaMemcpy(h_Aout, d_Aout, bytes/2, cudaMemcpyDeviceToHost);
 
-    cudaEventRecord(stopEvent, 0);
-    cudaEventSynchronize(stopEvent);
-    cudaEventElapsedTime(&ms, startEvent, stopEvent);
-    printf("Time for sequential transfer and execute (ms): %f\n", ms);
+    cudaEventRecord(memcpy_dtoh_stop_event, 0);
+    cudaEventSynchronize(memcpy_dtoh_stop_event);
+    cudaEventElapsedTime(&memcpy_dtoh_time, memcpy_dtoh_start_event, memcpy_dtoh_stop_event);
 
-    
-/*
-    // Size, in bytes, of each vector
-    size_t bytes = nx*ny*sizeof(int);
- 
-    // Allocate memory for each vector on host
-    h_Ain = (int*)malloc(bytes);
-    h_Aout = (int*)malloc(bytes);
- 
-    // Allocate memory for each vector on GPU
-    cudaMalloc(&d_Ain, bytes);
-    cudaMalloc(&d_Aout, bytes);
- 
-    int i,j;
-    // Initialize vectors on host
-    for( i = 0; i < ny; i++ ) {
-        for(j = 0; j < nx; j++) {
-            h_Ain[i*nx + j] = rand();
-        }
-    }
- 
-    // Copy host vectors to device
-    cudaMemcpy(d_Ain, h_Ain, bytes, cudaMemcpyHostToDevice);
- 
-    dim3 DimGrid(ceil(nx/16.0),ceil(ny/16.0));
-    dim3 DimBlock(16,16);
 
-    printf("Ain[1] result: %d\n", h_Ain[1]);
+    clock_t total_time_end = clock();
+    total_time = ((double)(total_time_end - total_time_begin) / (CLOCKS_PER_SEC / 1000)); // output in milli seocnd
 
-    printf("Launching kernel stencil....... \n");
-    
-    // Execute the kernel
-    stencil<<<DimGrid,DimBlock>>>(d_Ain, d_Aout, nx, ny);
- 
-    // Copy array back to host
-    cudaMemcpy(h_Aout, d_Aout, bytes, cudaMemcpyDeviceToHost );
- 
-    // Sum up vector c and print result divided by n, this should equal 1 within error
-    printf("Aout[1] result: %d\n", h_Aout[1]);
-
-*/
-    //printf("%f ~~~~~~~~~ \n", h_Ain(3,4));
+    // print results
+    printf("Total time (ms): %f\n", total_time);
+    printf("Time for executution (GPU) (ms): %f\n", gpu_compute_time);
+    printf("Time for executution (CPU) (ms): %f\n", cpu_compute_time);
+    printf("Time for memory copy (HtoD) (ms): %f\n", memcpy_htod_time);
+    printf("Time for memory copy (DtoH) (ms): %f\n", memcpy_dtoh_time);
 
     // Release device memory
     cudaFree(d_Ain);
