@@ -14,7 +14,6 @@ while grid_size < 4096:
     enable_pinned_memory_str = "pinned" if enable_pinned_memory else "pageable"
 
     print ('[-] doing {} {} ...'.format(grid_size, enable_pinned_memory_str))
-    enable_pinned_memory = 1
     os.system("nsys profile -o ./{}/{}.{}.{}.qdrep ./{} {} {}".format(output_folder, executable, grid_size, enable_pinned_memory_str, executable, grid_size, enable_pinned_memory))
     os.system("./{} {} {} | awk 'NR==1{{print $NF}}' >> ./{}/{}_{}_totaltime".format(executable, grid_size, enable_pinned_memory, output_folder, executable, enable_pinned_memory_str))
 

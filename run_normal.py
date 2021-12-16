@@ -20,7 +20,7 @@ while grid_size < 4096:
     enable_pinned_memory_str = "pinned" if enable_pinned_memory else "pageable"
 
     print ('[-] doing {} {} ...'.format(grid_size, enable_pinned_memory_str))
-    # os.system("nsys profile -o ./{}/{}.{}.{}.qdrep ./{} {} {}".format(output_folder, executable, grid_size, enable_pinned_memory_str, executable, grid_size, enable_pinned_memory))
+    os.system("nsys profile -o ./{}/{}.{}.{}.qdrep ./{} {} {}".format(output_folder, executable, grid_size, enable_pinned_memory_str, executable, grid_size, enable_pinned_memory))
     total_time = os.popen("./{} {} {} | awk 'NR==1{{print $NF}}'".format(executable, grid_size, enable_pinned_memory)).read().strip()
     page_faults = os.popen("perf stat -e faults ./{} {} {} 2>&1 >/dev/null | awk '{{if ($2 == \"faults\") {{print $1}} }}'".format(executable, grid_size, enable_pinned_memory)).read().strip()
     cache_misses = os.popen("perf stat -e cache-misses ./{} {} {} 2>&1 >/dev/null | awk '{{if ($2 == \"cache-misses\") {{print $1}} }}'".format(executable, grid_size, enable_pinned_memory)).read().strip()

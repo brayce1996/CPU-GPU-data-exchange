@@ -86,8 +86,6 @@ int main( int argc, char* argv[] )
     dim3 DimGrid(ceil(nx/16.0),ceil(ny/16.0));
     dim3 DimBlock(16,16);
 
-
-
     cudaEventCreate(&startEvent);
     cudaEventCreate(&stopEvent);
     cudaEventCreate(&dummyEvent);
